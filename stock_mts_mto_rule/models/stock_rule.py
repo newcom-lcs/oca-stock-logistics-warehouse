@@ -185,38 +185,30 @@ class StockRule(models.Model):
                 
         return True
 
-    # Add a method to detect when _run_buy is called
+    def _make_po_get_domain(self, company_id, values, partner):
+        """Override to add product to the domain to ensure one PO per product."""
+        domain = super()._make_po_get_domain(company_id, values, partner)
+        
+        # Get the product from the values
+        product = values.get('product_id')
+        if product:
+            # Include product in the domain to ensure separate POs per product
+            domain.append(('product_key', '=', product.id))
+            
+        return domain
+
+    def _prepare_purchase_order(self, company_id, origins, values):
+        """Override to add product_key to the PO values"""
+        vals = super()._prepare_purchase_order(company_id, origins, values)
+        
+        # Add product_key from the first procurement's values
+        product = values[0].get('product_id')
+        if product:
+            vals['product_key'] = product.id
+            
+        return vals
+            
     def _run_buy(self, procurements):
-        """Override to add debugging"""
-        _logger.info(
-            "DEBUG - MTS+MTO - _run_buy called with %s procurements", 
-            len(procurements)
-        )
-        
-        for procurement, rule in procurements:
-            origin = procurement.values.get('origin', 'Unknown')
-            group = procurement.values.get('group_id')
-            group_name = group.name if group else 'No Group'
-            sale_line = procurement.values.get('sale_line_id')
-            sale_order = self.env['sale.order.line'].browse(sale_line).order_id if sale_line else None
-            
-            _logger.info(
-                "DEBUG - MTS+MTO - Buy procurement: Product: %s, Qty: %s, Origin: %s, Group: %s, Sale Order: %s",
-                procurement.product_id.name,
-                procurement.product_qty,
-                origin,
-                group_name,
-                sale_order.name if sale_order else 'No SO'
-            )
-            
-            # Log the values that will be used for creating PO
-            _logger.info(
-                "DEBUG - MTS+MTO - Procurement values for PO creation: %s",
-                {k: v for k, v in procurement.values.items() if k not in ['product_id', 'product_uom']}
-            )
-        
-        # Call the original method using super
-        result = super(StockRule, self)._run_buy(procurements)
-        
-        _logger.info("DEBUG - MTS+MTO - _run_buy completed")
-        return result
+        """Override _run_buy to log that we're using our custom logic."""
+        _logger.info("Running _run_buy with separate PO per product logic")
+        return super()._run_buy(procurements)

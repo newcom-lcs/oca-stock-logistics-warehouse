@@ -7,7 +7,7 @@ class PurchaseOrder(models.Model):
     _inherit = "purchase.order"
 
     product_key = fields.Many2one(
-        "product.product",
+        "product.product", 
         string="Product Key",
         help="Technical field used to ensure separate purchase orders per product"
     ) 
