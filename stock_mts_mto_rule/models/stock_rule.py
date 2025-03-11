@@ -195,6 +195,12 @@ class StockRule(models.Model):
             # Include product in the domain to ensure separate POs per product
             domain.append(('product_key', '=', product.id))
             
+            # Debug log to confirm this method is being called and how the domain looks
+            _logger.info(
+                "CUSTOM DEBUG - _make_po_get_domain called for product %s (ID: %s), domain: %s",
+                product.name, product.id, domain
+            )
+        
         return domain
 
     def _prepare_purchase_order(self, company_id, origins, values):
@@ -206,9 +212,47 @@ class StockRule(models.Model):
         if product:
             vals['product_key'] = product.id
             
+            # Debug log to confirm the product_key is being set
+            _logger.info(
+                "CUSTOM DEBUG - Setting product_key %s (ID: %s) on new PO with origins: %s",
+                product.name, product.id, origins
+            )
+            
+            # Modify the group name to include the product
+            if vals.get('group_id'):
+                # Get the original group
+                group = self.env['procurement.group'].browse(vals['group_id'])
+                if group.exists():
+                    # Create a product-specific group name to force separate POs
+                    product_code = product.default_code or str(product.id)
+                    new_name = f"{group.name}-{product_code}"
+                    
+                    # Create a new group with modified name for this product
+                    new_group = self.env['procurement.group'].create({
+                        'name': new_name,
+                        'move_type': group.move_type,
+                        'sale_id': group.sale_id.id if hasattr(group, 'sale_id') and group.sale_id else False,
+                        'partner_id': group.partner_id.id if group.partner_id else False,
+                    })
+                    vals['group_id'] = new_group.id
+                    _logger.info(
+                        "CUSTOM DEBUG - Created custom group %s for product %s from original group %s",
+                        new_name, product.name, group.name
+                    )
+        
         return vals
             
     def _run_buy(self, procurements):
-        """Override _run_buy to log that we're using our custom logic."""
-        _logger.info("Running _run_buy with separate PO per product logic")
+        """Override _run_buy to ensure separate PO per product."""
+        _logger.info("CUSTOM DEBUG - _run_buy called with %s procurements", len(procurements))
+        
+        # Log each procurement for debugging
+        for procurement, rule in procurements:
+            _logger.info(
+                "CUSTOM DEBUG - Processing procurement for product %s (ID: %s), origin: %s",
+                procurement.product_id.name, 
+                procurement.product_id.id,
+                procurement.values.get('origin', 'Unknown')
+            )
+        
         return super()._run_buy(procurements)
