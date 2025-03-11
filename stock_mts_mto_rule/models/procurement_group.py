@@ -30,16 +30,19 @@ class ProcurementGroup(models.Model):
         
         # Log the created groups
         for group in result:
+            sale_order = None
+            if hasattr(group, 'sale_id'):
+                sale_order = group.sale_id
+                
             _logger.info(
                 "DEBUG - MTS+MTO - Procurement Group Created: %s, Sale Order: %s",
-                group.name, group.sale_id.name if group.sale_id else 'No Sale Order'
+                group.name, sale_order.name if sale_order else 'No Sale Order'
             )
                 
         return result
         
-    @api.model
     def run(self, procurements):
-        """Override run to add debugging"""
+        """Override run to add debugging - matching the parent signature exactly"""
         _logger.info(
             "DEBUG - MTS+MTO - Running %s procurements", 
             len(procurements)
@@ -58,7 +61,7 @@ class ProcurementGroup(models.Model):
             )
             
             # Log the values that are important for tracking
-            important_keys = ['group_id', 'sale_line_id', 'move_dest_ids', 'origin', 'propagate_group']
+            important_keys = ['group_id', 'sale_line_id', 'move_dest_ids', 'origin']
             important_values = {k: v for k, v in values.items() if k in important_keys}
             _logger.info(
                 "DEBUG - MTS+MTO - Procurement important values: %s",

@@ -19,7 +19,6 @@ class PurchaseOrder(models.Model):
         
         for vals in vals_list:
             origin = vals.get('origin', 'Unknown')
-            group_id = vals.get('group_id')
             partner_id = vals.get('partner_id')
             
             # Get partner name
@@ -28,8 +27,8 @@ class PurchaseOrder(models.Model):
                 partner_name = self.env['res.partner'].browse(partner_id).name
                 
             _logger.info(
-                "DEBUG - MTS+MTO - PO Creation: Origin: %s, Partner: %s, Group ID: %s, Values: %s",
-                origin, partner_name, group_id, vals
+                "DEBUG - MTS+MTO - PO Creation: Origin: %s, Partner: %s, Values: %s",
+                origin, partner_name, vals
             )
             
         result = super(PurchaseOrder, self).create(vals_list)
@@ -37,18 +36,15 @@ class PurchaseOrder(models.Model):
         # Log the created POs
         for po in result:
             _logger.info(
-                "DEBUG - MTS+MTO - PO Created: %s, Origin: %s, Partner: %s, Group: %s, Lines: %s",
-                po.name, po.origin, po.partner_id.name, po.group_id.name if po.group_id else 'No Group',
-                len(po.order_line)
+                "DEBUG - MTS+MTO - PO Created: %s, Origin: %s, Partner: %s, Lines: %s",
+                po.name, po.origin, po.partner_id.name, len(po.order_line)
             )
             
             # Log line details
             for line in po.order_line:
                 _logger.info(
-                    "DEBUG - MTS+MTO - PO Line: PO: %s, Product: %s, Qty: %s, Sale Order: %s, Group: %s",
-                    po.name, line.product_id.name, line.product_qty,
-                    line.sale_order_id.name if line.sale_order_id else 'No SO',
-                    line.group_id.name if line.group_id else 'No Group'
+                    "DEBUG - MTS+MTO - PO Line: PO: %s, Product: %s, Qty: %s",
+                    po.name, line.product_id.name, line.product_qty
                 )
                 
         return result
@@ -63,9 +59,8 @@ class PurchaseOrderLine(models.Model):
         if 'product_qty' in vals:
             for line in self:
                 _logger.info(
-                    "DEBUG - MTS+MTO - Updating PO Line: PO: %s, Product: %s, Current Qty: %s, New Qty: %s, Sale Line: %s",
-                    line.order_id.name, line.product_id.name, line.product_qty, vals['product_qty'],
-                    line.sale_line_id.id if line.sale_line_id else 'No Sale Line'
+                    "DEBUG - MTS+MTO - Updating PO Line: PO: %s, Product: %s, Current Qty: %s, New Qty: %s",
+                    line.order_id.name, line.product_id.name, line.product_qty, vals['product_qty']
                 )
                 
         result = super(PurchaseOrderLine, self).write(vals)
@@ -83,7 +78,6 @@ class PurchaseOrderLine(models.Model):
             product_id = vals.get('product_id')
             order_id = vals.get('order_id')
             product_qty = vals.get('product_qty')
-            sale_line_id = vals.get('sale_line_id', False)
             
             # Get names
             product_name = 'Unknown'
@@ -94,8 +88,8 @@ class PurchaseOrderLine(models.Model):
                 po_name = self.env['purchase.order'].browse(order_id).name
                 
             _logger.info(
-                "DEBUG - MTS+MTO - Creating PO Line: PO: %s, Product: %s, Qty: %s, Sale Line ID: %s",
-                po_name, product_name, product_qty, sale_line_id
+                "DEBUG - MTS+MTO - Creating PO Line: PO: %s, Product: %s, Qty: %s",
+                po_name, product_name, product_qty
             )
             
         result = super(PurchaseOrderLine, self).create(vals_list)

@@ -17,8 +17,8 @@ class PurchaseOrderLine(models.Model):
         )
         
         # Log the values dictionary which contains important info like group_id
-        important_keys = ['group_id', 'sale_line_id', 'move_dest_ids', 'propagate_group']
-        important_values = {k: v for k, v in values.items() if k in important_keys}
+        important_keys = ['group_id', 'move_dest_ids']
+        important_values = {k: v for k, v in values.items() if k in important_keys and v}
         _logger.info(
             "DEBUG - MTS+MTO - Candidate search values: %s",
             important_values
@@ -38,14 +38,17 @@ class PurchaseOrderLine(models.Model):
         
         # Log details about each candidate
         for candidate in candidates:
+            # Check if has related group_id
+            has_group = hasattr(candidate, 'group_id')
+            group_name = candidate.group_id.name if has_group and candidate.group_id else 'No Group'
+            
             _logger.info(
-                "DEBUG - MTS+MTO - Candidate line: PO: %s, Product: %s, Qty: %s, Origin: %s, Group: %s, Sale Line: %s",
+                "DEBUG - MTS+MTO - Candidate line: PO: %s, Product: %s, Qty: %s, Origin: %s, Group: %s",
                 candidate.order_id.name, 
                 candidate.product_id.name, 
                 candidate.product_qty,
                 candidate.order_id.origin,
-                candidate.group_id.name if candidate.group_id else 'No Group',
-                candidate.sale_line_id.id if candidate.sale_line_id else 'No Sale Line'
+                group_name
             )
         
         result = super(PurchaseOrderLine, self)._find_candidate(
