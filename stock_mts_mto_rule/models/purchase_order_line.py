@@ -16,54 +16,29 @@ class PurchaseOrderLine(models.Model):
             product_id.name, product_qty, origin
         )
         
-        # Log the values dictionary which contains important info like group_id
+        # Log the values dictionary which contains important info
         important_keys = ['group_id', 'move_dest_ids']
-        important_values = {k: v for k, v in values.items() if k in important_keys and v}
+        important_values = {k: str(v) for k, v in values.items() if k in important_keys and v}
         _logger.info(
-            "DEBUG - MTS+MTO - Candidate search values: %s",
+            "DEBUG - MTS+MTO - Candidate search values (simplified): %s",
             important_values
         )
         
-        candidates = self.search([
-            ('product_id', '=', product_id.id),
-            ('state', 'in', ['draft', 'sent']),
-            ('order_id.picking_type_id', '=', picking_type_id.id),
-            ('order_id.company_id', '=', company_id.id),
-        ], limit=1)
-        
-        _logger.info(
-            "DEBUG - MTS+MTO - Found %s candidate lines for product %s",
-            len(candidates), product_id.name
-        )
-        
-        # Log details about each candidate
-        for candidate in candidates:
-            # Check if has related group_id
-            has_group = hasattr(candidate, 'group_id')
-            group_name = candidate.group_id.name if has_group and candidate.group_id else 'No Group'
-            
-            _logger.info(
-                "DEBUG - MTS+MTO - Candidate line: PO: %s, Product: %s, Qty: %s, Origin: %s, Group: %s",
-                candidate.order_id.name, 
-                candidate.product_id.name, 
-                candidate.product_qty,
-                candidate.order_id.origin,
-                group_name
-            )
-        
+        # Search for candidates but don't log details that might cause database issues
         result = super(PurchaseOrderLine, self)._find_candidate(
             product_id, product_qty, product_uom, picking_type_id, 
             location_id, name, origin, company_id, values
         )
         
+        # Just log if we found a candidate or not
         if result:
             _logger.info(
-                "DEBUG - MTS+MTO - Selected candidate: PO: %s, Line ID: %s, Product: %s, Qty: %s",
-                result.order_id.name, result.id, result.product_id.name, result.product_qty
+                "DEBUG - MTS+MTO - Found candidate line for product %s",
+                product_id.name
             )
         else:
             _logger.info(
-                "DEBUG - MTS+MTO - No candidate selected, will create new line for product %s",
+                "DEBUG - MTS+MTO - No candidate found for product %s, will create new line",
                 product_id.name
             )
             

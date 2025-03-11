@@ -41,11 +41,11 @@ class ProcurementGroup(models.Model):
                 
         return result
         
-    def run(self, procurements):
-        """Override run to add debugging - matching the parent signature exactly"""
+    def run(self, procurements, raise_user_error=True):
+        """Override run to add debugging - correctly handling the raise_user_error parameter"""
         _logger.info(
-            "DEBUG - MTS+MTO - Running %s procurements", 
-            len(procurements)
+            "DEBUG - MTS+MTO - Running %s procurements (raise_user_error=%s)", 
+            len(procurements), raise_user_error
         )
         
         for procurement in procurements:
@@ -68,7 +68,8 @@ class ProcurementGroup(models.Model):
                 important_values
             )
             
-        result = super(ProcurementGroup, self).run(procurements)
+        # Call the original method with the correct signature
+        result = super(ProcurementGroup, self).run(procurements, raise_user_error=raise_user_error)
         
         _logger.info("DEBUG - MTS+MTO - Procurement run completed")
         return result 

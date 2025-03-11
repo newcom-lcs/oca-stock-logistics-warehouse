@@ -11,41 +11,30 @@ class PurchaseOrder(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        """Override create to add debugging information"""
+        """Override create to add simple debugging information without accessing relationships"""
         _logger.info(
             "DEBUG - MTS+MTO - Creating %s purchase orders", 
             len(vals_list)
         )
         
+        # Just log essential info from vals without accessing related records
         for vals in vals_list:
             origin = vals.get('origin', 'Unknown')
-            partner_id = vals.get('partner_id')
+            partner_id = vals.get('partner_id', 'Unknown')
             
-            # Get partner name
-            partner_name = 'Unknown'
-            if partner_id:
-                partner_name = self.env['res.partner'].browse(partner_id).name
-                
             _logger.info(
-                "DEBUG - MTS+MTO - PO Creation: Origin: %s, Partner: %s, Values: %s",
-                origin, partner_name, vals
+                "DEBUG - MTS+MTO - PO Creation: Origin: %s, Partner ID: %s",
+                origin, partner_id
             )
             
         result = super(PurchaseOrder, self).create(vals_list)
         
-        # Log the created POs
+        # Log minimal info about the created POs
         for po in result:
             _logger.info(
-                "DEBUG - MTS+MTO - PO Created: %s, Origin: %s, Partner: %s, Lines: %s",
-                po.name, po.origin, po.partner_id.name, len(po.order_line)
+                "DEBUG - MTS+MTO - PO Created: %s, Origin: %s",
+                po.name, po.origin
             )
-            
-            # Log line details
-            for line in po.order_line:
-                _logger.info(
-                    "DEBUG - MTS+MTO - PO Line: PO: %s, Product: %s, Qty: %s",
-                    po.name, line.product_id.name, line.product_qty
-                )
                 
         return result
 
@@ -54,13 +43,13 @@ class PurchaseOrderLine(models.Model):
     _inherit = "purchase.order.line"
     
     def write(self, vals):
-        """Override write to add debugging information"""
-        # Only log if product_qty is changed (adding to an existing line)
+        """Override write with minimal debugging"""
         if 'product_qty' in vals:
             for line in self:
                 _logger.info(
-                    "DEBUG - MTS+MTO - Updating PO Line: PO: %s, Product: %s, Current Qty: %s, New Qty: %s",
-                    line.order_id.name, line.product_id.name, line.product_qty, vals['product_qty']
+                    "DEBUG - MTS+MTO - Updating PO Line: Product: %s, Qty %s -> %s",
+                    line.product_id.name if line.product_id else 'Unknown',
+                    line.product_qty, vals['product_qty']
                 )
                 
         result = super(PurchaseOrderLine, self).write(vals)
@@ -68,28 +57,20 @@ class PurchaseOrderLine(models.Model):
     
     @api.model_create_multi
     def create(self, vals_list):
-        """Override create to add debugging information"""
+        """Override create with minimal debugging"""
         _logger.info(
             "DEBUG - MTS+MTO - Creating %s purchase order lines", 
             len(vals_list)
         )
         
+        # Just log product_id and qty without accessing related records
         for vals in vals_list:
-            product_id = vals.get('product_id')
-            order_id = vals.get('order_id')
-            product_qty = vals.get('product_qty')
+            product_id = vals.get('product_id', 'Unknown')
+            product_qty = vals.get('product_qty', 0.0)
             
-            # Get names
-            product_name = 'Unknown'
-            po_name = 'Unknown'
-            if product_id:
-                product_name = self.env['product.product'].browse(product_id).name
-            if order_id:
-                po_name = self.env['purchase.order'].browse(order_id).name
-                
             _logger.info(
-                "DEBUG - MTS+MTO - Creating PO Line: PO: %s, Product: %s, Qty: %s",
-                po_name, product_name, product_qty
+                "DEBUG - MTS+MTO - Creating PO Line: Product ID: %s, Qty: %s",
+                product_id, product_qty
             )
             
         result = super(PurchaseOrderLine, self).create(vals_list)
