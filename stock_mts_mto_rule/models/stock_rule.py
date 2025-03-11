@@ -1,6 +1,6 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl).
 
-from odoo import _, api, fields, models
+from odoo import api, fields, models, exceptions, _
 from odoo.exceptions import ValidationError
 from odoo.osv import expression
 from odoo.tools import float_compare, float_is_zero
@@ -18,6 +18,12 @@ class StockRule(models.Model):
     )
     mts_rule_id = fields.Many2one("stock.rule", string="MTS Rule", check_company=True)
     mto_rule_id = fields.Many2one("stock.rule", string="MTO Rule", check_company=True)
+    mts_mto_rule_id = fields.Many2one(
+        "stock.rule", "MTS+MTO Rule")
+    only_mto_rule_id = fields.Many2one(
+        "stock.rule", "Only MTO Rule")
+    only_mts_rule_id = fields.Many2one(
+        "stock.rule", "Only MTS Rule")
 
     @api.constrains("action", "mts_rule_id", "mto_rule_id")
     def _check_mts_mto_rule(self):
@@ -256,3 +262,29 @@ class StockRule(models.Model):
             )
         
         return super()._run_buy(procurements)
+
+    @api.model
+    def _get_mto_rule(self, warehouse):
+        """Get the first mto procurement rule"""
+        route_obj = self.env["stock.route"]
+        mto_route = self.env.ref("stock.route_warehouse0_mto", raise_if_not_found=False)
+        if not mto_route:
+            routes = route_obj.search([("name", "=", "Make To Order")])
+            if routes:
+                mto_route = routes[0]
+        if not mto_route:
+            raise exceptions.Warning(_(
+                "Can't find any generic Make To Order route."))
+        rules = self.search(
+            [
+                "&",
+                ("route_id", "=", mto_route.id),
+                ("location_dest_id", "=", warehouse.wh_input_stock_loc_id.id),
+            ]
+        )
+        if not rules:
+            raise exceptions.Warning(_(
+                "Can't find MTO Rule on the warehouse {}".format(
+                    warehouse.name)
+            ))
+        return rules[0]
