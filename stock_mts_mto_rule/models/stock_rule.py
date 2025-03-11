@@ -4,6 +4,9 @@ from odoo import _, api, fields, models
 from odoo.exceptions import ValidationError
 from odoo.osv import expression
 from odoo.tools import float_compare, float_is_zero
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class StockRule(models.Model):
@@ -45,14 +48,35 @@ class StockRule(models.Model):
         product_location = product.with_context(location=src_location_id)
         virtual_available = product_location.virtual_available
         qty_available = product.uom_id._compute_quantity(virtual_available, product_uom)
+        
+        # DEBUG: Log stock availability
+        _logger.info(
+            "DEBUG - MTS+MTO - Product %s (ID: %s) - Checking stock: Virtual available: %s, Qty available in UOM: %s, Requested qty: %s",
+            product.name, product.id, virtual_available, qty_available, product_qty
+        )
+        
         if float_compare(qty_available, 0.0, precision_digits=precision) > 0:
             if (
                 float_compare(qty_available, product_qty, precision_digits=precision)
                 >= 0
             ):
+                _logger.info(
+                    "DEBUG - MTS+MTO - Product %s has sufficient stock (%s). No MTO needed.",
+                    product.name, qty_available
+                )
                 return 0.0
             else:
-                return product_qty - qty_available
+                to_order = product_qty - qty_available
+                _logger.info(
+                    "DEBUG - MTS+MTO - Product %s has partial stock (%s). Need to order: %s",
+                    product.name, qty_available, to_order
+                )
+                return to_order
+        
+        _logger.info(
+            "DEBUG - MTS+MTO - Product %s has no stock. Need to order full qty: %s",
+            product.name, product_qty
+        )
         return product_qty
 
     def _run_split_procurement(self, procurements):
@@ -60,6 +84,22 @@ class StockRule(models.Model):
             "Product Unit of Measure"
         )
         for procurement, rule in procurements:
+            # DEBUG: Log procurement details
+            origin = procurement.values.get('origin', 'Unknown')
+            group = procurement.values.get('group_id')
+            group_name = group.name if group else 'No Group'
+            sale_line = procurement.values.get('sale_line_id')
+            sale_order = self.env['sale.order.line'].browse(sale_line).order_id if sale_line else None
+            
+            _logger.info(
+                "DEBUG - MTS+MTO - Processing procurement: Product: %s, Qty: %s, Origin: %s, Group: %s, Sale Order: %s",
+                procurement.product_id.name,
+                procurement.product_qty,
+                origin,
+                group_name,
+                sale_order.name if sale_order else 'No SO'
+            )
+            
             domain = self.env["procurement.group"]._get_moves_to_assign_domain(
                 procurement.company_id.id
             )
@@ -70,6 +110,10 @@ class StockRule(models.Model):
                 procurement.values,
             )
             if float_is_zero(needed_qty, precision_digits=precision):
+                _logger.info(
+                    "DEBUG - MTS+MTO - Using MTS rule only for product %s (full qty from stock)",
+                    procurement.product_id.name
+                )
                 getattr(self.env["stock.rule"], "_run_%s" % rule.mts_rule_id.action)(
                     [(procurement, rule.mts_rule_id)]
                 )
@@ -79,12 +123,25 @@ class StockRule(models.Model):
                 )
                 == 0.0
             ):
+                _logger.info(
+                    "DEBUG - MTS+MTO - Using MTO rule only for product %s (no stock available)",
+                    procurement.product_id.name
+                )
                 getattr(self.env["stock.rule"], "_run_%s" % rule.mto_rule_id.action)(
                     [(procurement, rule.mto_rule_id)]
                 )
             else:
                 mts_qty = procurement.product_qty - needed_qty
+                _logger.info(
+                    "DEBUG - MTS+MTO - Splitting procurement for product %s: MTS qty: %s, MTO qty: %s",
+                    procurement.product_id.name, mts_qty, needed_qty
+                )
+                
                 mts_procurement = procurement._replace(product_qty=mts_qty)
+                _logger.info(
+                    "DEBUG - MTS+MTO - Calling MTS rule action %s for product %s, qty %s",
+                    rule.mts_rule_id.action, procurement.product_id.name, mts_qty
+                )
                 getattr(self.env["stock.rule"], "_run_%s" % rule.mts_rule_id.action)(
                     [(mts_procurement, rule.mts_rule_id)]
                 )
@@ -101,7 +158,65 @@ class StockRule(models.Model):
                 moves_to_assign._action_assign()
 
                 mto_procurement = procurement._replace(product_qty=needed_qty)
+                _logger.info(
+                    "DEBUG - MTS+MTO - Calling MTO rule action %s for product %s, qty %s, origin %s, group %s",
+                    rule.mto_rule_id.action, 
+                    procurement.product_id.name, 
+                    needed_qty,
+                    origin,
+                    group_name
+                )
+                
+                # Before calling MTO rule
+                _logger.info(
+                    "DEBUG - MTS+MTO - MTO procurement values: %s",
+                    {k: v for k, v in mto_procurement.values.items() if k not in ['product_id', 'product_uom']}
+                )
+                
                 getattr(self.env["stock.rule"], "_run_%s" % rule.mto_rule_id.action)(
                     [(mto_procurement, rule.mto_rule_id)]
                 )
+                
+                # After calling MTO rule
+                _logger.info(
+                    "DEBUG - MTS+MTO - MTO rule action completed for product %s",
+                    procurement.product_id.name
+                )
+                
         return True
+
+    # Add a method to detect when _run_buy is called
+    def _run_buy(self, procurements):
+        """Override to add debugging"""
+        _logger.info(
+            "DEBUG - MTS+MTO - _run_buy called with %s procurements", 
+            len(procurements)
+        )
+        
+        for procurement, rule in procurements:
+            origin = procurement.values.get('origin', 'Unknown')
+            group = procurement.values.get('group_id')
+            group_name = group.name if group else 'No Group'
+            sale_line = procurement.values.get('sale_line_id')
+            sale_order = self.env['sale.order.line'].browse(sale_line).order_id if sale_line else None
+            
+            _logger.info(
+                "DEBUG - MTS+MTO - Buy procurement: Product: %s, Qty: %s, Origin: %s, Group: %s, Sale Order: %s",
+                procurement.product_id.name,
+                procurement.product_qty,
+                origin,
+                group_name,
+                sale_order.name if sale_order else 'No SO'
+            )
+            
+            # Log the values that will be used for creating PO
+            _logger.info(
+                "DEBUG - MTS+MTO - Procurement values for PO creation: %s",
+                {k: v for k, v in procurement.values.items() if k not in ['product_id', 'product_uom']}
+            )
+        
+        # Call the original method using super
+        result = super(StockRule, self)._run_buy(procurements)
+        
+        _logger.info("DEBUG - MTS+MTO - _run_buy completed")
+        return result
